@@ -618,38 +618,77 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
 
    char sound_dir[FILENAME_MAX];
    char sfx_file[FILENAME_MAX];
-   unsigned i, j, sound_count;
+   char sfx_config_file[FILENAME_MAX];
+   unsigned i, j, sound_count, percussion_count;
+   FILE *f_sfx_config;
 
    sfx_initialize_key_table();
    
    sprintf(sound_dir, "%s/%s", args->output_dir, SOUNDS_SUBDIR);
    make_dir(sound_dir);
 
+   sprintf(sfx_config_file, "%s/sounds.yaml", sound_dir);
+   f_sfx_config = fopen(sfx_config_file, "w");
+   
    sound_data_header sound_data = read_sound_data(data, secTbl->start);
    sound_bank_header sound_banks = read_sound_bank(data, secCtl->start);
    
    sound_count = 0;
+   percussion_count = 0;
+   
+   fprintf(f_sfx_config, "# this file contains all the sounds stored in the rom in the proper structure\n");
+   fprintf(f_sfx_config, "# add new sounds below to have it included in the re-assembly\n");
+   fprintf(f_sfx_config, "\n");
+   
+   fprintf(f_sfx_config, "bankunknown: %u\n", sound_banks.unknown);
+   fprintf(f_sfx_config, "\n");
+   fprintf(f_sfx_config, "sounds:\n");
    
    for (i = 0; i < sound_banks.bank_count; i++) {
+      fprintf(f_sfx_config, "   - [ \"bank%02X\", %u, %u ]\n", i, sound_banks.banks[i].unknown_1, sound_banks.banks[i].unknown_2);
+      sprintf(sound_dir, "%s/%s/bank%02X", args->output_dir, SOUNDS_SUBDIR, i);
+      make_dir(sound_dir);
       for (j = 0; j < sound_banks.banks[i].instrument_count; j++) {
+         if(sound_banks.banks[i].sounds[j].adrs != NULL) {
+            fprintf(f_sfx_config, "      - [ 'S', %u, %u, %u, %u, %u, %u, %u, %u, %u ]\n", sound_banks.banks[i].sounds[j].unknown, sound_banks.banks[i].sounds[j].adrs[0], sound_banks.banks[i].sounds[j].adrs[1], sound_banks.banks[i].sounds[j].adrs[2], sound_banks.banks[i].sounds[j].adrs[3], sound_banks.banks[i].sounds[j].adrs[4], sound_banks.banks[i].sounds[j].adrs[5], sound_banks.banks[i].sounds[j].adrs[6], sound_banks.banks[i].sounds[j].adrs[7]);
+         }
+         else {
+            fprintf(f_sfx_config, "      - [ 'S', %u ]\n", sound_banks.banks[i].sounds[j].unknown);
+         }
         if(sound_banks.banks[i].sounds[j].wav_prev != NULL) {
-          sprintf(sfx_file, "Bank%uSound%uPrev", i, j);
-          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_prev, sound_banks.banks[i].sounds[j].key_base_prev, sound_data.data[i], 16000);
+          sprintf(sfx_file, "Bank%02XSound%XPrev", i, j);
+          fprintf(f_sfx_config, "         - [ \"%s\", 'P', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav_prev->unknown_1, sound_banks.banks[i].sounds[j].wav_prev->unknown_2, sound_banks.banks[i].sounds[j].wav_prev->unknown_3, sound_banks.banks[i].sounds[j].wav_prev->unknown_4 );
+          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_prev, sound_banks.banks[i].sounds[j].key_base_prev, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
         if(sound_banks.banks[i].sounds[j].wav != NULL) {
-          sprintf(sfx_file, "Bank%uSound%u", i, j);
-          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav, sound_banks.banks[i].sounds[j].key_base, sound_data.data[i], 16000);
+          sprintf(sfx_file, "Bank%02XSound%X", i, j);
+          fprintf(f_sfx_config, "         - [ \"%s\", 'B', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav->unknown_1, sound_banks.banks[i].sounds[j].wav->unknown_2, sound_banks.banks[i].sounds[j].wav->unknown_3, sound_banks.banks[i].sounds[j].wav->unknown_4 );
+          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav, sound_banks.banks[i].sounds[j].key_base, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
         if(sound_banks.banks[i].sounds[j].wav_sec != NULL) {
-          sprintf(sfx_file, "Bank%uSound%uSec", i, j);
-          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_sec, sound_banks.banks[i].sounds[j].key_base_sec, sound_data.data[i], 16000);
+          sprintf(sfx_file, "Bank%02XSound%XSec", i, j);
+          fprintf(f_sfx_config, "         - [ \"%s\", 'S', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav_sec->unknown_1, sound_banks.banks[i].sounds[j].wav_sec->unknown_2, sound_banks.banks[i].sounds[j].wav_sec->unknown_3, sound_banks.banks[i].sounds[j].wav_sec->unknown_4 );
+          extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_sec, sound_banks.banks[i].sounds[j].key_base_sec, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
      }
      
-     // Todo: add percussion export here
+      for (j = 0; j < sound_banks.banks[i].percussion_count; j++) {
+         if(sound_banks.banks[i].percussions.items[j].adrs != NULL) {
+            fprintf(f_sfx_config, "      - [ 'P', %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u ]\n", sound_banks.banks[i].percussions.items[j].unknown_1, sound_banks.banks[i].percussions.items[j].pan, sound_banks.banks[i].percussions.items[j].unknown_2, sound_banks.banks[i].percussions.items[j].adrs[0], sound_banks.banks[i].percussions.items[j].adrs[1], sound_banks.banks[i].percussions.items[j].adrs[2], sound_banks.banks[i].percussions.items[j].adrs[3], sound_banks.banks[i].percussions.items[j].adrs[4], sound_banks.banks[i].percussions.items[j].adrs[5], sound_banks.banks[i].percussions.items[j].adrs[6], sound_banks.banks[i].percussions.items[j].adrs[7]);
+         }
+         else {
+            fprintf(f_sfx_config, "      - [ 'P', %u, %u, %u ]\n", sound_banks.banks[i].percussions.items[j].unknown_1, sound_banks.banks[i].percussions.items[j].pan, sound_banks.banks[i].percussions.items[j].unknown_2);
+         }
+         if(sound_banks.banks[i].percussions.items[j].wav != NULL) {
+            sprintf(sfx_file, "Bank%02XPercussion%X", i, j);
+            fprintf(f_sfx_config, "         - [ \"%s\", %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].percussions.items[j].wav->unknown_1, sound_banks.banks[i].percussions.items[j].wav->unknown_2, sound_banks.banks[i].percussions.items[j].wav->unknown_3, sound_banks.banks[i].percussions.items[j].wav->unknown_4 );
+            extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].percussions.items[j].wav, sound_banks.banks[i].percussions.items[j].key_base, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
+            percussion_count++;
+         }
+      }
    }
 
    // free used memory
@@ -660,7 +699,10 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
    INFO("Successfully exported sounds:\n");
    INFO("  # of banks: %u\n", sound_banks.bank_count);
    INFO("  # of sounds: %u\n", sound_count);
+   INFO("  # of percussions: %u\n", percussion_count);
 
+   fprintf(f_sfx_config, "\n");
+   fclose(f_sfx_config);
 }
 
 static void generate_ld_script(arg_config *args, rom_config *config)
@@ -941,7 +983,7 @@ static void split_file(unsigned char *data, unsigned int length, arg_config *arg
    strbuf_alloc(&makeheader_music, 256);
    strbuf_sprintf(&makeheader_music, "MUSIC_FILES =");
 
-   //Need both sfx sections to parse
+   //Need both sfx sections to parse completely
    split_section *sfxSec = NULL;
    
    for (s = 0; s < config->section_count; s++) {

@@ -12,6 +12,8 @@
 
 // defines
 
+#define DEFAULT_SFX_SAMPLING_RATE 16000
+
 // functions
 
 static float sfx_key_table[0x100];
@@ -55,7 +57,9 @@ static wave_table * read_wave_table(unsigned char *data, unsigned int wave_offse
    
    wav->sound_length = read_u32_be(&data[wave_offset+16]);
    wav->unknown_2 = read_u32_be(&data[wave_offset+20]);
-   wav->unknown_3 = read_u32_be(&data[wave_offset+24]);
+   
+   unsigned int flt = read_u32_be(&data[wave_offset+24]);
+   wav->unknown_3 = *((float*)&flt);
    wav->unknown_4 = read_u32_be(&data[wave_offset+28]);
    
    return wav;
@@ -308,7 +312,7 @@ int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_ta
    char wav_file[FILENAME_MAX];
    sprintf(wav_file, "%s/%s.wav", sound_dir, wav_name);
    
-   float sampling_rate_float = (float)sampling_rate;
+   float sampling_rate_float = ((float)sampling_rate) / (((wav->unknown_3 - 0.0f) < 0.00001f) ? 1.0f : wav->unknown_3);
 
    /*if (!ignoreKeyBase)
    {
@@ -554,6 +558,9 @@ sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset)
                      sound_banks.banks[i].sounds[j].adrs[k] = read_u16_be(&data[adrs_offset+sound_bank_offset+16+k*2]);
                   }
                }
+               else {
+                  sound_banks.banks[i].sounds[j].adrs = NULL;
+               }
                
                //wav_prev
                unsigned int wav_prev_offset = read_u32_be(&data[sound_offset+8]);
@@ -589,6 +596,7 @@ sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset)
                sound_banks.banks[i].sounds[j].key_base_sec = *((float*)&flt);
             }
             else {
+               sound_banks.banks[i].sounds[j].adrs = NULL;
                sound_banks.banks[i].sounds[j].wav_prev = NULL;
                sound_banks.banks[i].sounds[j].wav = NULL;
                sound_banks.banks[i].sounds[j].wav_sec = NULL;
@@ -626,7 +634,15 @@ sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset)
                  for (k = 0; k < 8; k++) {
                     sound_banks.banks[i].percussions.items[j].adrs[k] = read_u16_be(&data[adrs_offset+sound_bank_offset+16+k*2]);
                  }
-              }
+               }
+               else {
+                  sound_banks.banks[i].percussions.items[j].adrs = NULL;
+               }
+            }
+            else
+            {
+               sound_banks.banks[i].percussions.items[j].adrs = NULL;
+               sound_banks.banks[i].percussions.items[j].wav = NULL;
             }
          }
        }

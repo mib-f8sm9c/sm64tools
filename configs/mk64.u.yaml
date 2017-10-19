@@ -1734,7 +1734,8 @@ ranges:
    - [0x956670, 0x963EF0, "mio0", "level_dks_jungle_parkway_vertex"]
    - [0x963EF0, 0x966260, "mio0", "level_big_donut_vertex"]
    # Yet to be decoded - include as binary
-   - [0x966260, 0x979AA0, "sfx.ctl"]
+   - [0x966260, 0x979AA0, "sfx.ctl"]:  #ctl format: [type (sound/percussion), bank#, sound/percussion#, soundType (sound only, main/prev/sec), name, altSamplingRate
+      - ["sound", 0x0, 0x8, "main", "mario_mamma_mia"]
    - [0x979AA0, 0xBC5F60, "sfx.tbl"]
    - [0xBC5F60, 0xBE90D0, "m64"]
    - [0xBE90E0, 0xBE9160, "instrset", "instrument_set", 0x1E]

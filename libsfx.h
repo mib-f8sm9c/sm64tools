@@ -3,6 +3,8 @@
 
 // defines
 
+#define DEFAULT_SFX_SAMPLING_RATE 16000
+
 // typedefs
 
    typedef struct {
@@ -26,7 +28,7 @@
       predictor_data *predictor;
       unsigned int sound_length;
       unsigned int unknown_2;
-      unsigned int unknown_3;
+      float unknown_3;
       unsigned int unknown_4;
    } wave_table;
    
@@ -76,8 +78,6 @@
    } sound_data_header;
 
 // function prototypes
-
-//NEEDS COMMENTS!!!
 
 // initialize the key table for vadpcm decoding
 void sfx_initialize_key_table();
