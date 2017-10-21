@@ -652,4 +652,166 @@ sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset)
    return sound_banks;
 }
    
-   
+
+
+
+// sfx standalone executable
+#ifdef SFX_STANDALONE
+
+int sfx_encode_file(const char *in_file, const char *out_file)
+{
+   FILE *in;
+   FILE *out;
+   unsigned char *in_buf = NULL;
+   unsigned char *out_buf = NULL;
+   size_t file_size;
+   size_t bytes_read;
+   int bytes_encoded;
+   int bytes_written;
+   int ret_val = 0;
+
+   in = fopen(in_file, "rb");
+   if (in == NULL) {
+      return 1;
+   }
+
+   // allocate buffer to read entire contents of files
+   fseek(in, 0, SEEK_END);
+   file_size = ftell(in);
+   fseek(in, 0, SEEK_SET);
+   in_buf = malloc(file_size);
+
+   // read bytes
+   bytes_read = fread(in_buf, 1, file_size, in);
+   if (bytes_read != file_size) {
+      ret_val = 2;
+      goto free_all;
+   }
+
+   // allocate worst case length
+   out_buf = malloc(MIO0_HEADER_LENGTH + ((file_size+7)/8) + file_size);
+
+   // compress data in MIO0 format
+   bytes_encoded = mio0_encode(in_buf, file_size, out_buf);
+
+   // open output file
+   out = fopen(out_file, "wb");
+   if (out == NULL) {
+      ret_val = 4;
+      goto free_all;
+   }
+
+   // write data to file
+   bytes_written = fwrite(out_buf, 1, bytes_encoded, out);
+   if (bytes_written != bytes_encoded) {
+      ret_val = 5;
+   }
+
+   // clean up
+   fclose(out);
+free_all:
+   if (out_buf) {
+      free(out_buf);
+   }
+   if (in_buf) {
+      free(in_buf);
+   }
+   fclose(in);
+
+   return ret_val;
+}
+
+
+
+
+typedef struct
+{
+   char *in_filename;
+   char *out_filename;
+} arg_config;
+
+static arg_config default_config =
+{
+   NULL,
+   NULL
+};
+
+static void print_usage(void)
+{
+   ERROR("Usage: sfx-encode FILE [OUTPUT]\n"
+         "\n"
+         "sfx-encode: N64 SFX compression tool\n"
+         "\n"
+         "File arguments:\n"
+         " FILE        input file\n"
+         " [OUTPUT]    output file (default: FILE.out)\n");
+   exit(1);
+}
+
+// parse command line arguments
+static void parse_arguments(int argc, char *argv[], arg_config *config)
+{
+   int i;
+   int file_count = 0;
+   if (argc < 2) {
+      print_usage();
+      exit(1);
+   }
+   for (i = 1; i < argc; i++) {
+      switch (file_count) {
+         case 0:
+            config->in_filename = argv[i];
+            break;
+         case 1:
+            config->out_filename = argv[i];
+            break;
+         default: // too many
+            print_usage();
+            break;
+      }
+      file_count++;
+   }
+   if (file_count < 1) {
+      print_usage();
+   }
+}
+
+int main(int argc, char *argv[])
+{
+   char out_filename[FILENAME_MAX];
+   arg_config config;
+   int ret_val;
+
+   // get configuration from arguments
+   config = default_config;
+   parse_arguments(argc, argv, &config);
+   if (config.out_filename == NULL) {
+      config.out_filename = out_filename;
+      sprintf(config.out_filename, "%s.out", config.in_filename);
+   }
+
+   // operation
+   ret_val = sfx_encode_file(config.in_filename, config.out_filename);
+
+   switch (ret_val) {
+      /*case 1:
+         ERROR("Error opening input file \"%s\"\n", config.in_filename);
+         break;
+      case 2:
+         ERROR("Error reading from input file \"%s\"\n", config.in_filename);
+         break;
+      case 3:
+         ERROR("Error decoding MIO0 data. Wrong offset (0x%X)?\n", config.offset);
+         break;
+      case 4:
+         ERROR("Error opening output file \"%s\"\n", config.out_filename);
+         break;
+      case 5:
+         ERROR("Error writing bytes to output file \"%s\"\n", config.out_filename);
+         break;*/
+   }
+
+   return ret_val;
+}
+#endif // SFX_STANDALONE
+

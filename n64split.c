@@ -657,19 +657,19 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
          }
         if(sound_banks.banks[i].sounds[j].wav_prev != NULL) {
           sprintf(sfx_file, "Bank%02XSound%XPrev", i, j);
-          fprintf(f_sfx_config, "         - [ \"%s\", 'P', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav_prev->unknown_1, sound_banks.banks[i].sounds[j].wav_prev->unknown_2, sound_banks.banks[i].sounds[j].wav_prev->unknown_3, sound_banks.banks[i].sounds[j].wav_prev->unknown_4 );
+          fprintf(f_sfx_config, "         - [ \"%s\", 'P', %u, %u, %u, %f, %u ]\n", sfx_file, DEFAULT_SFX_SAMPLING_RATE, sound_banks.banks[i].sounds[j].wav_prev->unknown_1, sound_banks.banks[i].sounds[j].wav_prev->unknown_2, sound_banks.banks[i].sounds[j].wav_prev->unknown_3, sound_banks.banks[i].sounds[j].wav_prev->unknown_4 );
           extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_prev, sound_banks.banks[i].sounds[j].key_base_prev, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
         if(sound_banks.banks[i].sounds[j].wav != NULL) {
           sprintf(sfx_file, "Bank%02XSound%X", i, j);
-          fprintf(f_sfx_config, "         - [ \"%s\", 'B', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav->unknown_1, sound_banks.banks[i].sounds[j].wav->unknown_2, sound_banks.banks[i].sounds[j].wav->unknown_3, sound_banks.banks[i].sounds[j].wav->unknown_4 );
+          fprintf(f_sfx_config, "         - [ \"%s\", 'B', %u, %u, %u, %f, %u ]\n", sfx_file, DEFAULT_SFX_SAMPLING_RATE, sound_banks.banks[i].sounds[j].wav->unknown_1, sound_banks.banks[i].sounds[j].wav->unknown_2, sound_banks.banks[i].sounds[j].wav->unknown_3, sound_banks.banks[i].sounds[j].wav->unknown_4 );
           extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav, sound_banks.banks[i].sounds[j].key_base, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
         if(sound_banks.banks[i].sounds[j].wav_sec != NULL) {
           sprintf(sfx_file, "Bank%02XSound%XSec", i, j);
-          fprintf(f_sfx_config, "         - [ \"%s\", 'S', %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].sounds[j].wav_sec->unknown_1, sound_banks.banks[i].sounds[j].wav_sec->unknown_2, sound_banks.banks[i].sounds[j].wav_sec->unknown_3, sound_banks.banks[i].sounds[j].wav_sec->unknown_4 );
+          fprintf(f_sfx_config, "         - [ \"%s\", 'S', %u, %u, %u, %f, %u ]\n", sfx_file, DEFAULT_SFX_SAMPLING_RATE, sound_banks.banks[i].sounds[j].wav_sec->unknown_1, sound_banks.banks[i].sounds[j].wav_sec->unknown_2, sound_banks.banks[i].sounds[j].wav_sec->unknown_3, sound_banks.banks[i].sounds[j].wav_sec->unknown_4 );
           extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].sounds[j].wav_sec, sound_banks.banks[i].sounds[j].key_base_sec, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
           sound_count++;
        }
@@ -684,7 +684,7 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
          }
          if(sound_banks.banks[i].percussions.items[j].wav != NULL) {
             sprintf(sfx_file, "Bank%02XPercussion%X", i, j);
-            fprintf(f_sfx_config, "         - [ \"%s\", %u, %u, %f, %u ]\n", sfx_file, sound_banks.banks[i].percussions.items[j].wav->unknown_1, sound_banks.banks[i].percussions.items[j].wav->unknown_2, sound_banks.banks[i].percussions.items[j].wav->unknown_3, sound_banks.banks[i].percussions.items[j].wav->unknown_4 );
+            fprintf(f_sfx_config, "         - [ \"%s\", %u, %u, %u, %f, %u ]\n", sfx_file, DEFAULT_SFX_SAMPLING_RATE, sound_banks.banks[i].percussions.items[j].wav->unknown_1, sound_banks.banks[i].percussions.items[j].wav->unknown_2, sound_banks.banks[i].percussions.items[j].wav->unknown_3, sound_banks.banks[i].percussions.items[j].wav->unknown_4 );
             extract_raw_sound(sound_dir, sfx_file, sound_banks.banks[i].percussions.items[j].wav, sound_banks.banks[i].percussions.items[j].key_base, sound_data.data[i], DEFAULT_SFX_SAMPLING_RATE);
             percussion_count++;
          }
@@ -693,6 +693,7 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
 
    // free used memory
    if (sound_banks.bank_count > 0) {
+      //TODO: FREE THE REST OF THE SOUND DATA!!!
       free(sound_banks.banks);
    }
    
