@@ -108,6 +108,23 @@ static const short sfx_itable[16] =
    -8,-7,-6,-5,-4,-3,-2,-1,
 };
 
+static const short itable_half[4] =
+{
+	0,1,
+	-2,-1,
+};
+
+static unsigned short Flip16Bit(unsigned short ShortValue)
+{
+	return ((ShortValue >> 8) | ((ShortValue << 8)));
+}
+
+static unsigned long Flip32Bit(unsigned long inLong)
+{
+	return (((inLong & 0xFF000000) >> 24) | ((inLong & 0x00FF0000) >> 8) | ((inLong & 0x0000FF00) << 8) | ((inLong & 0x000000FF) << 24));
+}
+
+
 static signed short sfx_sign_extend(unsigned b, // number of bits representing the number in x
                   int x      // sign extend this b-bit number to r
 )
@@ -118,6 +135,388 @@ static signed short sfx_sign_extend(unsigned b, // number of bits representing t
 
    x = x & ((1 << b) - 1);  // (Skip this if bits in x above position b are already zero.)
    return (x ^ m) - m;
+}
+
+static int determineBestEncodeIndexAndPredictor_half(signed short* predictors, int numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float& bestFitIndex, int& predictorIndex)
+{
+        predictorIndex = 0;
+        float bestPredIndex = 99999999999.0f;
+ 
+        int bestEncodeIndex = 0;
+       
+        for(int p = 0; p < numPredictors; p++)
+        {
+                signed short* tempSampleSet = new signed short[8];
+                signed short* tmp = new signed short[8];
+ 
+                int index = 0;
+                bestFitIndex = 99999999999.0f;
+ 
+                signed short* pred1 = &predictors[p*0x10 + 0];
+                signed short* pred2 = &predictors[p*0x10 + 8];
+ 
+                for (int testIndex = 0; testIndex < 16; testIndex++)
+                {
+                        for (int x = 0; x < 8; x++)
+                        {
+                                tempSampleSet[x] = lastSampleSet[x];
+                        }
+ 
+                        float tempFitIndex = 0;
+                        for (int r = 0; r < 2; r++)
+                        {
+                                for (int i = 0; i < 8; i++)
+                                {
+                                        signed short sample = inPCMSamples[(r*8)+i];
+ 
+                                        signed long total = pred1[i] * tempSampleSet[6];
+                                        total += (pred2[i] * tempSampleSet[7]);
+ 
+                                        if (i>0)
+                                        {
+                                                for(int x=i-1; x>-1; x--)
+                                                {
+                                                        total += ( tmp[((i-1)-x)] * pred2[x] );
+                                                }
+                                        }
+ 
+                                        float bestFit = 9999999999;
+                                        int bestMatch = 0;
+ 
+                                        for (int x = 0; x < 4; x++)
+                                        {
+                                                signed short tmpValue = (itable_half[x] << testIndex);
+                                                float newValue = (((tmpValue << 0xB) + total) >> 0xB);
+                                                if ((fabs((float)(sample - newValue))) < bestFit)
+                                                {
+                                                        bestFit = (fabs((float)(sample - newValue)));
+                                                        bestMatch = x;
+                                                }
+                                        }
+ 
+                                        tmp[i] = (itable_half[bestMatch] << testIndex);
+                                        tempFitIndex += bestFit;
+                                }
+ 
+                       
+                                for (int x = 0; x < 8; x++)
+                                {
+                                        tempSampleSet[x] = inPCMSamples[(r*8)+x];
+                                }
+                        }
+ 
+                        if (tempFitIndex < bestFitIndex)
+                        {
+                                bestFitIndex = tempFitIndex;
+                                index = testIndex;
+                        }
+                }
+ 
+                if (bestFitIndex < bestPredIndex)
+                {
+                        bestPredIndex = bestFitIndex;
+                        predictorIndex = p;
+                        bestEncodeIndex = index;
+                }
+               
+                delete [] tmp;
+                delete [] tempSampleSet;
+        }
+ 
+        return bestEncodeIndex;
+}
+
+static int determineBestEncodeIndexAndPredictor(signed short* predictors, int numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float& bestFitIndex, int& predictorIndex)
+{
+        predictorIndex = 0;
+        float bestPredIndex = 99999999999.0f;
+ 
+        int bestEncodeIndex = 0;
+       
+        for(int p = 0; p < numPredictors; p++)
+        {
+                signed short* tempSampleSet = new signed short[8];
+                signed short* tmp = new signed short[8];
+ 
+                int index = 0;
+                bestFitIndex = 99999999999.0f;
+ 
+                signed short* pred1 = &predictors[p*0x10 + 0];
+                signed short* pred2 = &predictors[p*0x10 + 8];
+ 
+                for (int testIndex = 0; testIndex < 16; testIndex++)
+                {
+                        for (int x = 0; x < 8; x++)
+                        {
+                                tempSampleSet[x] = lastSampleSet[x];
+                        }
+ 
+                        float tempFitIndex = 0;
+                        for (int r = 0; r < 2; r++)
+                        {
+                                for (int i = 0; i < 8; i++)
+                                {
+                                        signed short sample = inPCMSamples[(r*8)+i];
+ 
+                                        signed long total = pred1[i] * tempSampleSet[6];
+                                        total += (pred2[i] * tempSampleSet[7]);
+ 
+                                        if (i>0)
+                                        {
+                                                for(int x=i-1; x>-1; x--)
+                                                {
+                                                        total += ( tmp[((i-1)-x)] * pred2[x] );
+                                                }
+                                        }
+ 
+                                        float bestFit = 9999999999;
+                                        int bestMatch = 0;
+ 
+                                        for (int x = 0; x < 16; x++)
+                                        {
+                                                signed short tmpValue = (itable[x] << testIndex);
+                                                float newValue = (((tmpValue << 0xB) + total) >> 0xB);
+                                                if ((fabs((float)(sample - newValue))) < bestFit)
+                                                {
+                                                        bestFit = (fabs((float)(sample - newValue)));
+                                                        bestMatch = x;
+                                                }
+                                        }
+ 
+                                        tmp[i] = (itable[bestMatch] << testIndex);
+                                        tempFitIndex += bestFit;
+                                }
+ 
+                       
+                                for (int x = 0; x < 8; x++)
+                                {
+                                        tempSampleSet[x] = inPCMSamples[(r*8)+x];
+                                }
+                        }
+ 
+                        if (tempFitIndex < bestFitIndex)
+                        {
+                                bestFitIndex = tempFitIndex;
+                                index = testIndex;
+                        }
+                }
+ 
+                if (bestFitIndex < bestPredIndex)
+                {
+                        bestPredIndex = bestFitIndex;
+                        predictorIndex = p;
+                        bestEncodeIndex = index;
+                }
+               
+                delete [] tmp;
+                delete [] tempSampleSet;
+        }
+ 
+        return bestEncodeIndex;
+}
+
+static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long& lenOut, ALADPCMBook *book)
+{
+	float entropy = 0.0f;
+
+	signed short* lastSampleSet = new signed short[8];
+	for (int x = 0; x < 8; x++)
+		lastSampleSet[x] = 0x0;
+
+	signed short* tmp = new signed short[8];
+
+	lenOut = 0;
+
+	for (int y = 0; y < numberSamplesIn; y += 16)
+	{
+		float totalBestFitDelta = 0;
+
+		signed short* pred1;
+		signed short* pred2;
+
+		int predictor = 0;
+		int index = 0;
+
+		index = determineBestEncodeIndexAndPredictor_half(book->predictors, book->npredictors, lastSampleSet, &inPCMSamples[y], totalBestFitDelta, predictor);
+
+		pred1 = &book->predictors[predictor*0x10 + 0];
+		pred2 = &book->predictors[predictor*0x10 + 8];
+
+		outVADPCM[lenOut++] = ((index << 4) | predictor);
+
+		for (int r = 0; r < 2; r++)
+		{
+			signed short resultingValue[8];
+			for (int i = 0; i < 8; i++)
+			{
+				signed short sample = 0;
+				if ((y + (r * 8) + i) < numberSamplesIn)
+                {
+					sample = inPCMSamples[y+(r*8)+i];
+				}
+
+				signed long total = pred1[i] * lastSampleSet[6];
+				total += (pred2[i] * lastSampleSet[7]);
+
+				if (i>0)
+				{
+					for(int x=i-1; x>-1; x--)
+					{
+						total += ( tmp[((i-1)-x)] * pred2[x] );
+					}
+				}
+
+				float bestFit = 9999999999;
+				int bestMatch = 0;
+				
+
+				for (int x = 0; x < 4; x++)
+				{
+					signed short newValue = ((((itable_half[x] << index) << 0xB) + total) >> 0xB);
+					if ((fabs((float)(sample - newValue))) < bestFit)
+					{
+						bestFit = (fabs((float)(sample - newValue)));
+						bestMatch = x;
+						resultingValue[i] = newValue;
+					}
+				}
+
+				tmp[i] = (itable_half[bestMatch] << index);
+
+				if ((i % 4) == 0)
+					outVADPCM[lenOut] = ((bestMatch << 6) & 0xC0);
+				else if ((i % 4) == 1)
+					outVADPCM[lenOut] |= ((bestMatch << 4) & 0x30);
+				else if ((i % 4) == 2)
+					outVADPCM[lenOut] |= ((bestMatch << 2) & 0x0C);
+				else
+				{
+					outVADPCM[lenOut] = (outVADPCM[lenOut] | (bestMatch & 0x3));
+					lenOut++;
+				}
+
+				entropy += bestFit;
+			}
+
+			for (int x = 0; x < 8; x++)
+			{
+				//lastSampleSet[x] = inPCMSamples[y+(r*8)+x];
+				lastSampleSet[x] = resultingValue[x];
+			}
+		}
+	}
+
+
+	if ((numberSamplesIn % 16) != 0)
+	{
+		// just cut it off for now
+	}
+
+	delete [] lastSampleSet;
+	delete [] tmp;
+
+	return entropy;
+}
+
+static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long& lenOut, ALADPCMBook *book)
+{
+	float entropy = 0.0f;
+
+	signed short* lastSampleSet = new signed short[8];
+	for (int x = 0; x < 8; x++)
+		lastSampleSet[x] = 0x0;
+
+	signed short* tmp = new signed short[8];
+
+	lenOut = 0;
+
+	for (int y = 0; y < numberSamplesIn; y += 16)
+	{
+		float totalBestFitDelta = 0;
+
+		signed short* pred1;
+		signed short* pred2;
+
+		int predictor = 0;
+		int index = 0;
+
+		index = determineBestEncodeIndexAndPredictor(book->predictors, book->npredictors, lastSampleSet, &inPCMSamples[y], totalBestFitDelta, predictor);
+
+		pred1 = &book->predictors[predictor*0x10 + 0];
+		pred2 = &book->predictors[predictor*0x10 + 8];
+
+		//index = determineBestEncodeIndex(pred1, pred2, lastSampleSet, &inPCMSamples[y], totalBestFitDelta);
+
+		outVADPCM[lenOut++] = ((index << 4) | predictor);
+
+		for (int r = 0; r < 2; r++)
+		{
+			signed short resultingValue[8];
+			for (int i = 0; i < 8; i++)
+			{
+				signed short sample = 0;
+				if ((y + (r * 8) + i) < numberSamplesIn)
+                {
+					sample = inPCMSamples[y+(r*8)+i];
+				}
+
+				signed long total = pred1[i] * lastSampleSet[6];
+				total += (pred2[i] * lastSampleSet[7]);
+
+				if (i>0)
+				{
+					for(int x=i-1; x>-1; x--)
+					{
+						total += ( tmp[((i-1)-x)] * pred2[x] );
+					}
+				}
+
+				float bestFit = 9999999999;
+				int bestMatch = 0;
+				
+
+				for (int x = 0; x < 16; x++)
+				{
+					signed short newValue = ((((itable[x] << index) << 0xB) + total) >> 0xB);
+					if ((fabs((float)(sample - newValue))) < bestFit)
+					{
+						bestFit = (fabs((float)(sample - newValue)));
+						bestMatch = x;
+						resultingValue[i] = newValue;
+					}
+				}
+
+				tmp[i] = (itable[bestMatch] << index);
+
+				if ((i % 2) == 0)
+					outVADPCM[lenOut] = (bestMatch << 4);
+				else
+				{
+					outVADPCM[lenOut] = (outVADPCM[lenOut] | bestMatch);
+					lenOut++;
+				}
+
+				entropy += bestFit;
+			}
+
+			for (int x = 0; x < 8; x++)
+			{
+				//lastSampleSet[x] = inPCMSamples[y+(r*8)+x];
+				lastSampleSet[x] = resultingValue[x];
+			}
+		}
+	}
+
+
+	if ((numberSamplesIn % 16) != 0)
+	{
+		// just cut it off for now
+	}
+
+	delete [] lastSampleSet;
+	delete [] tmp;
+
+	return entropy;
 }
 
 static void decode_8( unsigned char *in, signed short *out , int index, signed short * pred1, signed short lastsmp[8])
@@ -306,6 +705,264 @@ static unsigned long decode( unsigned char *in, signed short *out, unsigned long
    return samples;
 }
 
+int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wave_table* wav, unsigned char* final_data, unsigned long* final_count, unsigned long* sampling_rate)
+{
+	unsigned char* raw_data;
+	int raw_length;
+	unsigned long loop_start, loop_end, loop_count;
+	bool has_loop_data;
+	
+   //Open wav file path, read all data into raw_data
+   FILE *file;
+   
+   file = fopen(wav_file_path, "rb");
+   
+   if (file == NULL)
+   {
+      //MessageBox(NULL, "Error cannot read wav file", "Error", NULL);
+      fclose(file);
+	  return 1;
+   }
+   
+   fseek(file, 0, SEEK_END);
+   int fileSize = ftell(file);
+   rewind(file);
+   
+   //Check against the bad wav types
+   
+   unsigned char* wav_data = malloc(fileSize * sizeof(unsigned char));
+   fread(wav_data, 1, fileSize, file);
+   fclose(file);
+
+   if (((((((wav_data[0] << 8) | wav_data[1]) << 8) | wav_data[2]) << 8) | wav_data[3]) != 0x52494646)
+   {
+      free(wav_data);
+      //MessageBox(NULL, "Error not RIFF wav", "Error", NULL);
+      return 2;
+   }
+
+   if (((((((wav_data[0x8] << 8) | wav_data[0x9]) << 8) | wav_data[0xA]) << 8) | wav_data[0xB]) != 0x57415645)
+   {
+      free(wav_data);
+      //MessageBox(NULL, "Error not WAVE wav", "Error", NULL);
+	  return 2;
+   }
+
+   bool end_flag = false;
+
+   unsigned long currentOffset = 0xC;
+
+   unsigned short channels = 0;
+   samplingRate = 0;
+   unsigned short bitRate = 0;
+
+   while (!end_flag)
+   {
+      if (currentOffset >= (fileSize - 8))
+         break;
+
+      unsigned long sectionType = ((((((wav_data[currentOffset] << 8) | wav_data[currentOffset + 1]) << 8) | wav_data[currentOffset + 2]) << 8) | wav_data[currentOffset + 3]);
+
+      if (sectionType == 0x666D7420) // fmt
+      {
+         unsigned long chunkSize = ((((((wav_data[currentOffset + 0x7] << 8) | wav_data[currentOffset + 0x6]) << 8) | wav_data[currentOffset + 0x5]) << 8) | wav_data[currentOffset + 0x4]);
+
+         channels = ((wav_data[currentOffset + 0xB] << 8) | wav_data[currentOffset + 0xA]);
+
+         if (channels != 0x0001)
+         {
+            //MessageBox(NULL, "Warning: Only mono wav supported", "Error", NULL);
+            //end_flag = true;
+            //returnFlag = false;
+            free(wav_data);
+			return 5;
+         }
+
+         samplingRate = ((((((wav_data[currentOffset + 0xF] << 8) | wav_data[currentOffset + 0xE]) << 8) | wav_data[currentOffset + 0xD]) << 8) | wav_data[currentOffset + 0xC]);
+         
+         bitRate = ((wav_data[currentOffset + 0x17] << 8) | wav_data[currentOffset + 0x16]);
+
+         currentOffset += chunkSize + 8;
+      }
+      else if (sectionType == 0x64617461) // data
+      {
+         raw_length = ((((((wav_data[currentOffset + 0x7] << 8) | wav_data[currentOffset + 0x6]) << 8) | wav_data[currentOffset + 0x5]) << 8) | wav_data[currentOffset + 0x4]);
+
+         if ((channels == 0) || (samplingRate == 0) || (bitRate == 0))
+         {
+            //MessageBox(NULL, "Incorrect section type (missing fmt)", "Error unknown wav format", NULL);
+            free(wav_data);
+			return 3;
+         }
+
+         if (bitRate == 0x0010)
+         {
+            raw_data = malloc(raw_length * sizeof(unsigned char));
+            for (int x = 0; x < rawLength; x++)
+            {
+               raw_data[x] = wav_data[currentOffset + 0x8 + x];
+            }
+         
+            returnFlag = true;
+         }
+         else
+         {
+            //MessageBox(NULL, "Error only 16-bit PCM wav supported", "Error", NULL);
+            free(wav_data);
+			return 4;
+         }
+
+         currentOffset += rawLength + 8;
+      }
+      else if (sectionType == 0x736D706C) // smpl
+      {
+         unsigned long chunk_size = ((((((wav_data[currentOffset + 0x7] << 8) | wav_data[currentOffset + 0x6]) << 8) | wav_data[currentOffset + 0x5]) << 8) | wav_data[currentOffset + 0x4]);
+
+         unsigned long numSampleBlocks = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x24]));
+         if (numSampleBlocks > 0)
+         {
+            hasLoopData = true;
+
+            keyBase = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x14])) & 0xFF;
+            loopStart = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x34]));
+            loopEnd = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x38]));
+            loopCount = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x40]));
+            if (loopCount == 0)
+               loopCount = 0xFFFFFFFF;
+         }
+
+         currentOffset += 8 + chunk_size;
+      }
+      else
+      {
+         unsigned long chunk_size = ((((((wav_data[currentOffset + 0x7] << 8) | wav_data[currentOffset + 0x6]) << 8) | wav_data[currentOffset + 0x5]) << 8) | wav_data[currentOffset + 0x4]);
+
+         currentOffset += 8 + chunk_size;
+      }
+   }
+
+   free(wav_data);
+   
+   
+   ///Start C++
+   
+	//if (alBank->alSfx == NULL)
+		//return false;
+
+	has_loop_data = false;
+	key_base = 0x3C;
+	loop_start = 0x00000000;
+	loop_end = 0x00000000;
+	loop_count = 0x00000000;
+
+	wav = malloc(sizeof(wave_table));
+	
+	{
+		//alWave->type = AL_ADPCM_WAVE;
+		//alWave->adpcmWave = new ALADPCMWaveInfo();
+		//alWave->adpcmWave->loop = NULL;
+		/*new ALRawLoop();
+		alWave->rawWave->loop->start = 0;
+		alWave->rawWave->loop->end = (rawLength-2);
+		alWave->rawWave->loop->count = 0;*/
+
+		//alWave->adpcmWave->book = new ALADPCMBook();
+
+		int numberSamples = (raw_length / 2);
+		signed short* pcm_samples = new signed short[numberSamples];
+
+		for (int x = 0; x < numberSamples; x++)
+		{
+			pcm_samples[x] = (signed short)(((raw_data[x*2+1] << 8)) | raw_data[x*2]);
+		}
+
+		//if (!samePred)
+		{
+			if (true)//decode8Only)
+			{
+				wav->predictor = malloc(sizeof(predictor_data));
+				//alWave->adpcmWave->book->predictors = new signed short[0x10];
+				wav->predictor->data = malloc(0x10 * sizeof(unsigned))
+				for (int x = 0; x < 0x10; x++)
+					wav->predictor->data[x] = 0x00;
+					//alWave->adpcmWave->book->predictors[x] = 0x00;
+
+				//alWave->adpcmWave->book->npredictors = 1;
+				//alWave->adpcmWave->book->order = 2;
+				wav->predictor->predictor_count = 1;
+				wav->predictor->order = 2;
+			}
+			else
+			{
+				//TO DO: ADD THIS IN!!
+				//alWave->adpcmWave->book->predictors = determineBestPredictors(alBank, alWave->adpcmWave->book->npredictors, alWave->adpcmWave->book->order, pcm_samples, numberSamples);
+			}
+		}
+		
+		//delete [] alWave->wav_data;
+
+		unsigned long vadpcm_output_length;
+		unsigned char* vadpcm_data = malloc(numberSamples * sizeof(unsigned char[numberSamples]));
+
+		
+		//TODO: ADD THESE FUNCTIONS IN
+		if (decode8Only)
+		{
+			encode_half(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, alWave->adpcmWave->book);
+		}
+		else
+		{
+			encode(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, alWave->adpcmWave->book);
+		}
+
+		(*final_count) = vadpcm_output_length;
+		if (((*final_count) % 2) == 1)
+			(*final_count)++;
+
+		unsigned char* final_data = malloc((*final_count) * sizeof(unsigned char));
+		for (int x = 0; x < (*final_count); x++)
+			final_data[x] = 0x00;
+
+		memcpy(final_data, vadpcm_data, vadpcm_output_length);
+
+		//if ((alBank->soundBankFormat == SUPERMARIO64FORMAT)
+				//|| (alBank->soundBankFormat == ZELDAFORMAT)
+				//|| (alBank->soundBankFormat == STARFOX64FORMAT)
+				//)
+		{
+			wav->loop = new ALADPCMloop();
+			wav->loop->start = 0;
+			wav->end = ((vadpcm_output_length * 7) / 4);
+			wav->loop->count = 0;
+
+			if (has_loop_data)
+			{
+				wav->unknown1 = sfx_key_table[keyBase];
+				
+			/*  Not mario format, for some reason it does this:
+			
+				alWave->adpcmWave->loop->count = loopCount;
+				alWave->adpcmWave->loop->start = loopStart;
+				alWave->adpcmWave->loop->end = loopEnd;
+				alWave->adpcmWave->loop->unknown1 = 0;
+				for (int x = 0; x < 0x10; x++)
+					alWave->adpcmWave->loop->state[x] = alWave->adpcmWave->book->predictors[x];
+			*/
+			
+			}
+		}
+		
+
+		free(pcm_samples);
+		free(vadpcm_data);
+	}
+
+	free(raw_data);
+
+   
+   
+   return returnFlag;
+}
 
 int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_table *wav, float key_base, unsigned char *snd_data, unsigned long sampling_rate)
 {
