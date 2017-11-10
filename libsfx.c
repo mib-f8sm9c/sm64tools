@@ -108,7 +108,7 @@ static const short sfx_itable[16] =
    -8,-7,-6,-5,-4,-3,-2,-1,
 };
 
-static const short itable_half[4] =
+static const short sfx_itable_half[4] =
 {
 	0,1,
 	-2,-1,
@@ -124,6 +124,10 @@ static unsigned long Flip32Bit(unsigned long inLong)
 	return (((inLong & 0xFF000000) >> 24) | ((inLong & 0x00FF0000) >> 8) | ((inLong & 0x0000FF00) << 8) | ((inLong & 0x000000FF) << 24));
 }
 
+unsigned long CharArrayToLong(unsigned char* currentSpot)
+{
+	return Flip32Bit(((unsigned long*)currentSpot)[0]);
+}
 
 static signed short sfx_sign_extend(unsigned b, // number of bits representing the number in x
                   int x      // sign extend this b-bit number to r
@@ -137,20 +141,20 @@ static signed short sfx_sign_extend(unsigned b, // number of bits representing t
    return (x ^ m) - m;
 }
 
-static int determineBestEncodeIndexAndPredictor_half(signed short* predictors, int numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float& bestFitIndex, int& predictorIndex)
+static long determineBestEncodeIndexAndPredictor_half(signed short* predictors, long numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float* bestFitIndex, long* predictorIndex)
 {
-        predictorIndex = 0;
+        (*predictorIndex) = 0;
         float bestPredIndex = 99999999999.0f;
  
         int bestEncodeIndex = 0;
        
         for(int p = 0; p < numPredictors; p++)
         {
-                signed short* tempSampleSet = new signed short[8];
-                signed short* tmp = new signed short[8];
+                signed short* tempSampleSet = malloc(8 * sizeof(signed short));
+                signed short* tmp = malloc(8 * sizeof(signed short));
  
                 int index = 0;
-                bestFitIndex = 99999999999.0f;
+                (*bestFitIndex) = 99999999999.0f;
  
                 signed short* pred1 = &predictors[p*0x10 + 0];
                 signed short* pred2 = &predictors[p*0x10 + 8];
@@ -185,7 +189,7 @@ static int determineBestEncodeIndexAndPredictor_half(signed short* predictors, i
  
                                         for (int x = 0; x < 4; x++)
                                         {
-                                                signed short tmpValue = (itable_half[x] << testIndex);
+                                                signed short tmpValue = (sfx_itable_half[x] << testIndex);
                                                 float newValue = (((tmpValue << 0xB) + total) >> 0xB);
                                                 if ((fabs((float)(sample - newValue))) < bestFit)
                                                 {
@@ -194,7 +198,7 @@ static int determineBestEncodeIndexAndPredictor_half(signed short* predictors, i
                                                 }
                                         }
  
-                                        tmp[i] = (itable_half[bestMatch] << testIndex);
+                                        tmp[i] = (sfx_itable_half[bestMatch] << testIndex);
                                         tempFitIndex += bestFit;
                                 }
  
@@ -205,41 +209,41 @@ static int determineBestEncodeIndexAndPredictor_half(signed short* predictors, i
                                 }
                         }
  
-                        if (tempFitIndex < bestFitIndex)
+                        if (tempFitIndex < (*bestFitIndex))
                         {
-                                bestFitIndex = tempFitIndex;
+                                (*bestFitIndex) = tempFitIndex;
                                 index = testIndex;
                         }
                 }
  
-                if (bestFitIndex < bestPredIndex)
+                if ((*bestFitIndex) < bestPredIndex)
                 {
-                        bestPredIndex = bestFitIndex;
-                        predictorIndex = p;
+                        bestPredIndex = (*bestFitIndex);
+                        (*predictorIndex) = p;
                         bestEncodeIndex = index;
                 }
                
-                delete [] tmp;
-                delete [] tempSampleSet;
+                free(tmp);
+                free(tempSampleSet);
         }
  
         return bestEncodeIndex;
 }
 
-static int determineBestEncodeIndexAndPredictor(signed short* predictors, int numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float& bestFitIndex, int& predictorIndex)
+static int determineBestEncodeIndexAndPredictor(signed short* predictors, int numPredictors, signed short* lastSampleSet, signed short* inPCMSamples, float* bestFitIndex, int* predictorIndex)
 {
-        predictorIndex = 0;
+        (*predictorIndex) = 0;
         float bestPredIndex = 99999999999.0f;
  
         int bestEncodeIndex = 0;
        
         for(int p = 0; p < numPredictors; p++)
         {
-                signed short* tempSampleSet = new signed short[8];
-                signed short* tmp = new signed short[8];
+                signed short* tempSampleSet = malloc(8 * sizeof(signed short));
+                signed short* tmp = malloc(8 * sizeof(signed short));
  
                 int index = 0;
-                bestFitIndex = 99999999999.0f;
+                (*bestFitIndex) = 99999999999.0f;
  
                 signed short* pred1 = &predictors[p*0x10 + 0];
                 signed short* pred2 = &predictors[p*0x10 + 8];
@@ -274,7 +278,7 @@ static int determineBestEncodeIndexAndPredictor(signed short* predictors, int nu
  
                                         for (int x = 0; x < 16; x++)
                                         {
-                                                signed short tmpValue = (itable[x] << testIndex);
+                                                signed short tmpValue = (sfx_itable[x] << testIndex);
                                                 float newValue = (((tmpValue << 0xB) + total) >> 0xB);
                                                 if ((fabs((float)(sample - newValue))) < bestFit)
                                                 {
@@ -283,7 +287,7 @@ static int determineBestEncodeIndexAndPredictor(signed short* predictors, int nu
                                                 }
                                         }
  
-                                        tmp[i] = (itable[bestMatch] << testIndex);
+                                        tmp[i] = (sfx_itable[bestMatch] << testIndex);
                                         tempFitIndex += bestFit;
                                 }
  
@@ -294,38 +298,38 @@ static int determineBestEncodeIndexAndPredictor(signed short* predictors, int nu
                                 }
                         }
  
-                        if (tempFitIndex < bestFitIndex)
+                        if (tempFitIndex < (*bestFitIndex))
                         {
-                                bestFitIndex = tempFitIndex;
+                                (*bestFitIndex) = tempFitIndex;
                                 index = testIndex;
                         }
                 }
  
-                if (bestFitIndex < bestPredIndex)
+                if ((*bestFitIndex) < bestPredIndex)
                 {
-                        bestPredIndex = bestFitIndex;
-                        predictorIndex = p;
+                        bestPredIndex = (*bestFitIndex);
+                        (*predictorIndex) = p;
                         bestEncodeIndex = index;
                 }
                
-                delete [] tmp;
-                delete [] tempSampleSet;
+                free(tmp);
+                free(tempSampleSet);
         }
  
         return bestEncodeIndex;
 }
 
-static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long& lenOut, ALADPCMBook *book)
+static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long* lenOut, predictor_data *predictor_info)
 {
 	float entropy = 0.0f;
 
-	signed short* lastSampleSet = new signed short[8];
+	signed short* lastSampleSet = malloc(8 * sizeof(signed short));
 	for (int x = 0; x < 8; x++)
 		lastSampleSet[x] = 0x0;
 
-	signed short* tmp = new signed short[8];
+	signed short* tmp = malloc(8 * sizeof(signed short));
 
-	lenOut = 0;
+	(*lenOut) = 0;
 
 	for (int y = 0; y < numberSamplesIn; y += 16)
 	{
@@ -337,12 +341,12 @@ static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsign
 		int predictor = 0;
 		int index = 0;
 
-		index = determineBestEncodeIndexAndPredictor_half(book->predictors, book->npredictors, lastSampleSet, &inPCMSamples[y], totalBestFitDelta, predictor);
+		index = determineBestEncodeIndexAndPredictor_half(predictor_info->data, predictor_info->predictor_count, lastSampleSet, &inPCMSamples[y], &totalBestFitDelta, &predictor);
 
-		pred1 = &book->predictors[predictor*0x10 + 0];
-		pred2 = &book->predictors[predictor*0x10 + 8];
+		pred1 = &predictor_info->data[predictor*0x10 + 0];
+		pred2 = &predictor_info->data[predictor*0x10 + 8];
 
-		outVADPCM[lenOut++] = ((index << 4) | predictor);
+		outVADPCM[(*lenOut)++] = ((index << 4) | predictor);
 
 		for (int r = 0; r < 2; r++)
 		{
@@ -372,7 +376,7 @@ static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsign
 
 				for (int x = 0; x < 4; x++)
 				{
-					signed short newValue = ((((itable_half[x] << index) << 0xB) + total) >> 0xB);
+					signed short newValue = ((((sfx_itable_half[x] << index) << 0xB) + total) >> 0xB);
 					if ((fabs((float)(sample - newValue))) < bestFit)
 					{
 						bestFit = (fabs((float)(sample - newValue)));
@@ -381,18 +385,18 @@ static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsign
 					}
 				}
 
-				tmp[i] = (itable_half[bestMatch] << index);
+				tmp[i] = (sfx_itable_half[bestMatch] << index);
 
 				if ((i % 4) == 0)
-					outVADPCM[lenOut] = ((bestMatch << 6) & 0xC0);
+					outVADPCM[(*lenOut)] = ((bestMatch << 6) & 0xC0);
 				else if ((i % 4) == 1)
-					outVADPCM[lenOut] |= ((bestMatch << 4) & 0x30);
+					outVADPCM[(*lenOut)] |= ((bestMatch << 4) & 0x30);
 				else if ((i % 4) == 2)
-					outVADPCM[lenOut] |= ((bestMatch << 2) & 0x0C);
+					outVADPCM[(*lenOut)] |= ((bestMatch << 2) & 0x0C);
 				else
 				{
-					outVADPCM[lenOut] = (outVADPCM[lenOut] | (bestMatch & 0x3));
-					lenOut++;
+					outVADPCM[(*lenOut)] = (outVADPCM[(*lenOut)] | (bestMatch & 0x3));
+					(*lenOut)++;
 				}
 
 				entropy += bestFit;
@@ -412,23 +416,23 @@ static float encode_half(signed short* inPCMSamples, int numberSamplesIn, unsign
 		// just cut it off for now
 	}
 
-	delete [] lastSampleSet;
-	delete [] tmp;
+	free(lastSampleSet);
+	free(tmp);
 
 	return entropy;
 }
 
-static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long& lenOut, ALADPCMBook *book)
+static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned char* outVADPCM, unsigned long* lenOut, predictor_data *predictor_info)
 {
 	float entropy = 0.0f;
 
-	signed short* lastSampleSet = new signed short[8];
+	signed short* lastSampleSet = malloc(8 * sizeof(signed short));
 	for (int x = 0; x < 8; x++)
 		lastSampleSet[x] = 0x0;
 
-	signed short* tmp = new signed short[8];
+	signed short* tmp = malloc(8 * sizeof(signed short));
 
-	lenOut = 0;
+	(*lenOut) = 0;
 
 	for (int y = 0; y < numberSamplesIn; y += 16)
 	{
@@ -440,14 +444,14 @@ static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned ch
 		int predictor = 0;
 		int index = 0;
 
-		index = determineBestEncodeIndexAndPredictor(book->predictors, book->npredictors, lastSampleSet, &inPCMSamples[y], totalBestFitDelta, predictor);
+		index = determineBestEncodeIndexAndPredictor(predictor_info->data, predictor_info->predictor_count, lastSampleSet, &inPCMSamples[y], &totalBestFitDelta, &predictor);
 
-		pred1 = &book->predictors[predictor*0x10 + 0];
-		pred2 = &book->predictors[predictor*0x10 + 8];
+		pred1 = &predictor_info->data[predictor*0x10 + 0];
+		pred2 = &predictor_info->data[predictor*0x10 + 8];
 
 		//index = determineBestEncodeIndex(pred1, pred2, lastSampleSet, &inPCMSamples[y], totalBestFitDelta);
 
-		outVADPCM[lenOut++] = ((index << 4) | predictor);
+		outVADPCM[(*lenOut)++] = ((index << 4) | predictor);
 
 		for (int r = 0; r < 2; r++)
 		{
@@ -477,7 +481,7 @@ static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned ch
 
 				for (int x = 0; x < 16; x++)
 				{
-					signed short newValue = ((((itable[x] << index) << 0xB) + total) >> 0xB);
+					signed short newValue = ((((sfx_itable[x] << index) << 0xB) + total) >> 0xB);
 					if ((fabs((float)(sample - newValue))) < bestFit)
 					{
 						bestFit = (fabs((float)(sample - newValue)));
@@ -486,14 +490,14 @@ static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned ch
 					}
 				}
 
-				tmp[i] = (itable[bestMatch] << index);
+				tmp[i] = (sfx_itable[bestMatch] << index);
 
 				if ((i % 2) == 0)
-					outVADPCM[lenOut] = (bestMatch << 4);
+					outVADPCM[(*lenOut)] = (bestMatch << 4);
 				else
 				{
-					outVADPCM[lenOut] = (outVADPCM[lenOut] | bestMatch);
-					lenOut++;
+					outVADPCM[(*lenOut)] = (outVADPCM[(*lenOut)] | bestMatch);
+					(*lenOut)++;
 				}
 
 				entropy += bestFit;
@@ -513,8 +517,8 @@ static float encode(signed short* inPCMSamples, int numberSamplesIn, unsigned ch
 		// just cut it off for now
 	}
 
-	delete [] lastSampleSet;
-	delete [] tmp;
+	free(lastSampleSet);
+	free(tmp);
 
 	return entropy;
 }
@@ -705,12 +709,12 @@ static unsigned long decode( unsigned char *in, signed short *out, unsigned long
    return samples;
 }
 
-int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wave_table* wav, unsigned char* final_data, unsigned long* final_count, unsigned long* sampling_rate)
+int extract_raw_sound_data(unsigned char* wav_file_path, unsigned char* key_base, wave_table* wav, unsigned char* final_data, unsigned long* final_count, unsigned long* sampling_rate)
 {
 	unsigned char* raw_data;
 	int raw_length;
 	unsigned long loop_start, loop_end, loop_count;
-	bool has_loop_data;
+	char has_loop_data;
 	
    //Open wav file path, read all data into raw_data
    FILE *file;
@@ -748,15 +752,15 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 	  return 2;
    }
 
-   bool end_flag = false;
+   char end_flag = 0;
 
    unsigned long currentOffset = 0xC;
 
    unsigned short channels = 0;
-   samplingRate = 0;
+   (*sampling_rate) = 0;
    unsigned short bitRate = 0;
 
-   while (!end_flag)
+   while (end_flag == 0)
    {
       if (currentOffset >= (fileSize - 8))
          break;
@@ -772,13 +776,13 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
          if (channels != 0x0001)
          {
             //MessageBox(NULL, "Warning: Only mono wav supported", "Error", NULL);
-            //end_flag = true;
+            //end_flag = 1;
             //returnFlag = false;
             free(wav_data);
-			return 5;
+			   return 5;
          }
 
-         samplingRate = ((((((wav_data[currentOffset + 0xF] << 8) | wav_data[currentOffset + 0xE]) << 8) | wav_data[currentOffset + 0xD]) << 8) | wav_data[currentOffset + 0xC]);
+         (*sampling_rate) = ((((((wav_data[currentOffset + 0xF] << 8) | wav_data[currentOffset + 0xE]) << 8) | wav_data[currentOffset + 0xD]) << 8) | wav_data[currentOffset + 0xC]);
          
          bitRate = ((wav_data[currentOffset + 0x17] << 8) | wav_data[currentOffset + 0x16]);
 
@@ -788,31 +792,31 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
       {
          raw_length = ((((((wav_data[currentOffset + 0x7] << 8) | wav_data[currentOffset + 0x6]) << 8) | wav_data[currentOffset + 0x5]) << 8) | wav_data[currentOffset + 0x4]);
 
-         if ((channels == 0) || (samplingRate == 0) || (bitRate == 0))
+         if ((channels == 0) || ((*sampling_rate) == 0) || (bitRate == 0))
          {
             //MessageBox(NULL, "Incorrect section type (missing fmt)", "Error unknown wav format", NULL);
             free(wav_data);
-			return 3;
+			   return 3;
          }
 
          if (bitRate == 0x0010)
          {
             raw_data = malloc(raw_length * sizeof(unsigned char));
-            for (int x = 0; x < rawLength; x++)
+            for (int x = 0; x < raw_length; x++)
             {
                raw_data[x] = wav_data[currentOffset + 0x8 + x];
             }
          
-            returnFlag = true;
+            //returnFlag = true;
          }
          else
          {
             //MessageBox(NULL, "Error only 16-bit PCM wav supported", "Error", NULL);
             free(wav_data);
-			return 4;
+			   return 4;
          }
 
-         currentOffset += rawLength + 8;
+         currentOffset += raw_length + 8;
       }
       else if (sectionType == 0x736D706C) // smpl
       {
@@ -821,14 +825,14 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
          unsigned long numSampleBlocks = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x24]));
          if (numSampleBlocks > 0)
          {
-            hasLoopData = true;
+            has_loop_data = 1;
 
-            keyBase = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x14])) & 0xFF;
-            loopStart = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x34]));
-            loopEnd = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x38]));
-            loopCount = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x40]));
-            if (loopCount == 0)
-               loopCount = 0xFFFFFFFF;
+            (*key_base) = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x14])) & 0xFF;
+            loop_start = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x34]));
+            loop_end = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x38]));
+            loop_count = Flip32Bit(CharArrayToLong(&wav_data[currentOffset+0x40]));
+            if (loop_count == 0)
+               loop_count = 0xFFFFFFFF;
          }
 
          currentOffset += 8 + chunk_size;
@@ -849,8 +853,8 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 	//if (alBank->alSfx == NULL)
 		//return false;
 
-	has_loop_data = false;
-	key_base = 0x3C;
+	has_loop_data = 0; //NOTE: THIS IS BLOCKING LATER CODE, TAKE OUT/RELOCATE TO START OF FUNCTION
+	(*key_base) = 0x3C;
 	loop_start = 0x00000000;
 	loop_end = 0x00000000;
 	loop_count = 0x00000000;
@@ -869,7 +873,7 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 		//alWave->adpcmWave->book = new ALADPCMBook();
 
 		int numberSamples = (raw_length / 2);
-		signed short* pcm_samples = new signed short[numberSamples];
+		signed short* pcm_samples = malloc(numberSamples * sizeof(signed short));
 
 		for (int x = 0; x < numberSamples; x++)
 		{
@@ -878,11 +882,11 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 
 		//if (!samePred)
 		{
-			if (true)//decode8Only)
+			if (1 == 1)//decode8Only)
 			{
 				wav->predictor = malloc(sizeof(predictor_data));
 				//alWave->adpcmWave->book->predictors = new signed short[0x10];
-				wav->predictor->data = malloc(0x10 * sizeof(unsigned))
+				wav->predictor->data = malloc(0x10 * sizeof(unsigned));
 				for (int x = 0; x < 0x10; x++)
 					wav->predictor->data[x] = 0x00;
 					//alWave->adpcmWave->book->predictors[x] = 0x00;
@@ -906,13 +910,13 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 
 		
 		//TODO: ADD THESE FUNCTIONS IN
-		if (decode8Only)
+		if (1 == 1)//decode8Only)
 		{
-			encode_half(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, alWave->adpcmWave->book);
+			encode_half(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, wav->predictor);
 		}
 		else
 		{
-			encode(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, alWave->adpcmWave->book);
+			encode(pcm_samples, numberSamples, vadpcm_data, vadpcm_output_length, wav->predictor);
 		}
 
 		(*final_count) = vadpcm_output_length;
@@ -930,14 +934,14 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 				//|| (alBank->soundBankFormat == STARFOX64FORMAT)
 				//)
 		{
-			wav->loop = new ALADPCMloop();
+			wav->loop = malloc(sizeof(loop_data));
 			wav->loop->start = 0;
-			wav->end = ((vadpcm_output_length * 7) / 4);
+			wav->loop->end = ((vadpcm_output_length * 7) / 4);
 			wav->loop->count = 0;
 
 			if (has_loop_data)
 			{
-				wav->unknown1 = sfx_key_table[keyBase];
+				wav->unknown_1 = sfx_key_table[(int)key_base];
 				
 			/*  Not mario format, for some reason it does this:
 			
@@ -960,8 +964,8 @@ int extract_raw_sound(unsigned char* wav_file_path, unsigned char* key_base, wav
 	free(raw_data);
 
    
-   
-   return returnFlag;
+   //Note: there's a single return flag use above to consider: have a different return value for it??
+   return 0;
 }
 
 int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_table *wav, float key_base, unsigned char *snd_data, unsigned long sampling_rate)
@@ -1342,31 +1346,38 @@ int sfx_encode_file(const char *in_file, const char *out_file)
    bytes_read = fread(in_buf, 1, file_size, in);
    if (bytes_read != file_size) {
       ret_val = 2;
-      goto free_all;
+   }
+   else
+   {
+      
+      //OKAY, WE NEED TO HAVE A .S FILE TO EXPORT THE CORRECT INFO INTO. WE ALSO NEED TO HAVE A 
+      
+      // allocate worst case length
+      out_buf = malloc(MIO0_HEADER_LENGTH + ((file_size+7)/8) + file_size);
+
+      // compress data in MIO0 format
+      bytes_encoded = mio0_encode(in_buf, file_size, out_buf);
+
+      // open output file
+      out = fopen(out_file, "wb");
+      if (out == NULL) {
+         ret_val = 4;
+         goto free_all;
+      }
+      else
+      {
+
+         // write data to file
+         bytes_written = fwrite(out_buf, 1, bytes_encoded, out);
+         if (bytes_written != bytes_encoded) {
+            ret_val = 5;
+         }
+
+         // clean up
+         fclose(out);
+      }
    }
 
-   // allocate worst case length
-   out_buf = malloc(MIO0_HEADER_LENGTH + ((file_size+7)/8) + file_size);
-
-   // compress data in MIO0 format
-   bytes_encoded = mio0_encode(in_buf, file_size, out_buf);
-
-   // open output file
-   out = fopen(out_file, "wb");
-   if (out == NULL) {
-      ret_val = 4;
-      goto free_all;
-   }
-
-   // write data to file
-   bytes_written = fwrite(out_buf, 1, bytes_encoded, out);
-   if (bytes_written != bytes_encoded) {
-      ret_val = 5;
-   }
-
-   // clean up
-   fclose(out);
-free_all:
    if (out_buf) {
       free(out_buf);
    }
@@ -1385,6 +1396,7 @@ typedef struct
 {
    char *in_filename;
    char *out_filename;
+   unsigned long sampling_rate;
 } arg_config;
 
 static arg_config default_config =
@@ -1395,13 +1407,14 @@ static arg_config default_config =
 
 static void print_usage(void)
 {
-   ERROR("Usage: sfx-encode FILE [OUTPUT]\n"
+   ERROR("Usage: sfx-encode [-s SAMPLINGRATE] FILE [OUTPUT]\n"
          "\n"
          "sfx-encode: N64 SFX compression tool\n"
          "\n"
          "File arguments:\n"
-         " FILE        input file\n"
-         " [OUTPUT]    output file (default: FILE.out)\n");
+         " -s SAMAPLINGRATE   sampling rate for sound data (default: 16000)\n"
+         " FILE               input file\n"
+         " [OUTPUT]           output file (default: FILE.out)\n");
    exit(1);
 }
 
@@ -1415,18 +1428,29 @@ static void parse_arguments(int argc, char *argv[], arg_config *config)
       exit(1);
    }
    for (i = 1; i < argc; i++) {
-      switch (file_count) {
-         case 0:
-            config->in_filename = argv[i];
-            break;
-         case 1:
-            config->out_filename = argv[i];
-            break;
-         default: // too many
-            print_usage();
-            break;
+      if (argv[i][0] == '-') {
+         switch (argv[i][1]) {
+            case 's':
+               config->sampling_rate = strtoul(argv[i], NULL, 0);
+               break;
+            default:
+               print_usage();
+               break;
+         }
+      } else {
+         switch (file_count) {
+            case 0:
+               config->in_filename = argv[i];
+               break;
+            case 1:
+               config->out_filename = argv[i];
+               break;
+            default: // too many
+               print_usage();
+               break;
+         }
+         file_count++;
       }
-      file_count++;
    }
    if (file_count < 1) {
       print_usage();
