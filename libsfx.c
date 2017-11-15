@@ -27,16 +27,16 @@ static wave_table * read_wave_table(unsigned char *data, unsigned int wave_offse
    //loop
    unsigned int loop_offset = read_u32_be(&data[wave_offset+8]);
    if(loop_offset != 0) {
-     loop_offset += sound_bank_offset + 16;
+     loop_offset += sound_bank_offset + 0x10;
      wav->loop = malloc(sizeof(loop_data));
      wav->loop->start = read_u32_be(&data[loop_offset]);
      wav->loop->end = read_u32_be(&data[loop_offset+4]);
      wav->loop->count = read_u32_be(&data[loop_offset+8]);
      wav->loop->unknown = read_u32_be(&data[loop_offset+12]);
      if(wav->loop->start != 0 || wav->loop->count != 0) {
-       wav->loop->state = malloc(8 * sizeof(unsigned));
-       for (int k = 0; k < 8; k++) {
-          wav->loop->state[k] = read_u16_be(&data[loop_offset+16+k*2]);
+       wav->loop->state = malloc(0x10 * sizeof(unsigned));
+       for (int k = 0; k < 0x10; k++) {
+          wav->loop->state[k] = read_u16_be(&data[loop_offset+0x10+k*2]);
        }
      }
    }
@@ -970,6 +970,8 @@ int extract_raw_sound_data(unsigned char* wav_file_path, unsigned char* key_base
 
 int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_table *wav, float key_base, unsigned char *snd_data, unsigned long sampling_rate)
 {
+   char bin_file[FILENAME_MAX];
+   sprintf(bin_file, "%s/%s.bin", sound_dir, wav_name);
    char wav_file[FILENAME_MAX];
    sprintf(wav_file, "%s/%s.wav", sound_dir, wav_name);
    
@@ -1149,6 +1151,9 @@ int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_ta
       wav_data[wavIndex + 0x17] = 0x00;
    }
 
+   //Write bin file first, so file creation dates can be used to see if the wav file's been updated
+   write_file(bin_file, sndData, wav->sound_length);
+   
    write_file(wav_file, wav_data, (chunk_size + 0x8 + 0x4));
    
    free(wav_data);
@@ -1157,6 +1162,55 @@ int extract_raw_sound(unsigned char *sound_dir, unsigned char *wav_name, wave_ta
    return 1;
 }
 
+int write_sound_data(sound_data_header sound_data, unsigned char *bin_file) {
+   
+   unsigned long sound_data_length = 4;
+   unsigned i, j;
+   int ret_val = 0;
+   
+   sound_data_length += 8 * sound_data.data_count;
+   sound_data_length += 0x10 - (sound_data_length % 0x10); //add buffer to 0x10 address
+   
+   for (i = 0; i < sound_data.data_count; i++) {
+      sound_data_length += sound_data.data_length[i];
+   }
+   
+   unsigned char *sndData = malloc(sound_data_length);
+   memset(sndData, 0, sound_data_length);
+   
+   write_u16_be(&sndData[0], sound_data.unknown);
+   write_u16_be(&sndData[2], sound_data.data_count);
+   
+   unsigned int sound_data_offset = 4 + 8 * sound_data.data_count;
+   sound_data_offset += 0x10 - (sound_data_offset % 0x10); //add buffer to 0x10 address
+   
+   for (i = 0; i < sound_data.data_count; i++) {
+      write_u32_be(&sndData[4 + i * 8], sound_data_offset);
+      write_u32_be(&sndData[8 + i * 8], sound_data.data_length[i]);
+      //NEED TO MAKE SURE THE DATA BLOCK ISN'T THE SAME AS A PREVIOUS ONE!!
+      for(int j = 0; j < sound_data.data_length[i]; j++) {
+         sndData[sound_data_offset + j] = sound_data.data[i][j];
+      }
+      sound_data_offset += sound_data.data_length[i];
+   }
+   
+   //STILL NEED TO WRITE THE FILE OPEN HERE!!
+   FILE *out;
+   out = fopen(bin_file, "wb");
+   if (out == NULL) {
+      return 1;
+   }
+   
+   int bytes_written = fwrite(sndData, 1, sound_data_length, out);
+   if (bytes_written != sound_data_length) {
+      ret_val = 2;
+   }
+
+   // clean up
+   fclose(out);
+   return ret_val;
+}
+ 
 sound_data_header read_sound_data(unsigned char *data, unsigned int data_offset) {
    
    unsigned i, j;
@@ -1167,6 +1221,7 @@ sound_data_header read_sound_data(unsigned char *data, unsigned int data_offset)
    
    if (sound_data.data_count > 0) {
       sound_data.data = malloc(sound_data.data_count * sizeof(*sound_data.data));
+      sound_data.data_length = malloc(sound_data.data_count * sizeof(unsigned int));
       for (i = 0; i < sound_data.data_count; i++) {
          unsigned int sound_data_offset = read_u32_be(&data[data_offset+i*8+4]) + data_offset;
          unsigned int sound_data_length = read_u32_be(&data[data_offset+i*8+8]);
@@ -1175,12 +1230,254 @@ sound_data_header read_sound_data(unsigned char *data, unsigned int data_offset)
          for(j = 0; j < sound_data_length; j++) {
             sound_data.data[i][j] = data[sound_data_offset+j];
          }
+         sound_data.data_length[i] = sound_data_length;
       }
    }
    
    return sound_data;
 }
    
+int get_wav_table_size(wave_table *wav) {
+   int length = 0x20;
+   if(wav->loop != NULL) {
+      length += 0x10;
+      if(wav->loop->start != 0 || wav->loop->count != 0)
+         length += 0x20;
+   }
+   if(wav->predictor != NULL) {
+      length += 8 + wav->predictor->order * wav->predictor->predictor_count * 8 * sizeof(unsigned);
+   }
+   return length;
+}
+   
+int write_sound_bank_wav(wave_table *wav, int *offset, int bankOffset, unsigned char *data) {
+   int wavOffset = (*offset);
+   int startWavOffset = wavOffset;
+   write_u32_be(&data[wavOffset], wav->unknown_1);
+   write_u32_be(&data[wavOffset + 0x4], wav->sound_offset);
+   write_u32_be(&data[wavOffset + 0x10], wav->sound_length);
+   write_u32_be(&data[wavOffset + 0x14], wav->unknown_2);
+   write_u32_be(&data[wavOffset + 0x18], *((unsigned int*)&wav->unknown_3)); //float to uint
+   write_u32_be(&data[wavOffset + 0x1C], wav->unknown_4);
+   
+   wavOffset += 0x20;
+   
+   if(wav->predictor != NULL) {
+      write_u32_be(&data[startWavOffset + 0xC], wavOffset - bankOffset);
+      
+      write_u32_be(&data[wavOffset], wav->predictor->order);
+      write_u32_be(&data[wavOffset + 0x4], wav->predictor->predictor_count);
+      
+      for(int i = 0; i < wav->predictor->order * wav->predictor->predictor_count * 8; i++ ) {
+            write_u16_be(&data[wavOffset + 8 + i * 2], wav->predictor->data[i]);
+      }
+      
+      wavOffset += 8 + wav->predictor->order * wav->predictor->predictor_count * 8 * 2;
+      if((wavOffset % 0x10) != 0)
+         wavOffset += 0x10 - (wavOffset % 0x10);
+   }
+   
+   if(wav->loop != NULL) {
+      write_u32_be(&data[startWavOffset + 0x8], wavOffset - bankOffset);
+      
+      write_u32_be(&data[wavOffset], wav->loop->start);
+      write_u32_be(&data[wavOffset + 0x4], wav->loop->end);
+      write_u32_be(&data[wavOffset + 0x8], wav->loop->count);
+      write_u32_be(&data[wavOffset + 0xC], wav->loop->unknown);
+      wavOffset += 0x10;
+      if(wav->loop->start != 0 || wav->loop->count != 0) {
+         for(int i = 0; i < 0x10; i++)
+            write_u16_be(&data[wavOffset + i * 2], wav->loop->state[i]);
+         wavOffset += 0x20;
+      }
+   }
+   
+   (*offset) = wavOffset;
+}
+   
+int write_sound_bank_adrs(unsigned *adrs, int *offset, unsigned char *data) {
+   write_u16_be(&data[(*offset)], adrs[0]);
+   write_u16_be(&data[(*offset) + 0x2], adrs[1]);
+   write_u16_be(&data[(*offset) + 0x4], adrs[2]);
+   write_u16_be(&data[(*offset) + 0x6], adrs[3]);
+   write_u16_be(&data[(*offset) + 0x8], adrs[4]);
+   write_u16_be(&data[(*offset) + 0xA], adrs[5]);
+   write_u16_be(&data[(*offset) + 0xC], adrs[6]);
+   write_u16_be(&data[(*offset) + 0xE], adrs[7]);
+   (*offset) += 0x10;
+}
+   
+//TODO: FIGURE OUT A WAY TO USE DUPLICATE ADRS DATA TO SAVE ON SPACE
+int write_sound_bank(sound_bank_header sound_bank, unsigned char *bin_file) {
+   
+   unsigned long sound_bank_length = 4;
+   unsigned i, j;
+   int ret_val = 0;
+   
+   sound_bank_length += 8 * sound_bank.bank_count;
+   if((sound_bank_length % 0x10) != 0)
+      sound_bank_length += 0x10 - (sound_bank_length % 0x10);
+   
+   for (i = 0; i < sound_bank.bank_count; i++) {
+      sound_bank_length += 8; //bank list
+      sound_bank_length += 14 + 4 * sound_bank.banks[i].instrument_count; //bank
+      for (j = 0; j < sound_bank.banks[i].instrument_count; j++) {
+         sound_bank_length += 0x20; //sound
+         //need to handle identical adrs in the future here : /
+         if(sound_bank.banks[i].sounds[j].adrs != NULL)
+            sound_bank_length += 0x10;
+         if(sound_bank.banks[i].sounds[j].wav != NULL)
+            sound_bank_length += get_wav_table_size(sound_bank.banks[i].sounds[j].wav);
+         if(sound_bank.banks[i].sounds[j].wav_prev != NULL)
+            sound_bank_length += get_wav_table_size(sound_bank.banks[i].sounds[j].wav_prev);
+         if(sound_bank.banks[i].sounds[j].wav_sec != NULL)
+            sound_bank_length += get_wav_table_size(sound_bank.banks[i].sounds[j].wav_sec);
+      }
+      sound_bank_length += 4 * sound_bank.banks[i].percussion_count; //percussions
+      for (j = 0; j < sound_bank.banks[i].percussion_count; j++) {
+         sound_bank_length += 0x10;
+         if(sound_bank.banks[i].percussions.items[j].adrs != NULL)
+            sound_bank_length += 0x10;
+         if(sound_bank.banks[i].percussions.items[j].wav != NULL)
+            sound_bank_length += get_wav_table_size(sound_bank.banks[i].percussions.items[j].wav);
+      }
+   }
+   
+   //handle buffers here
+   sound_bank_length += 0x1000;
+   
+   //Now actually write it
+   unsigned char *sndData = malloc(sound_bank_length);
+   memset(sndData, 0, sound_bank_length);
+   
+   write_u16_be(&sndData[0], sound_bank.unknown);
+   write_u16_be(&sndData[2], sound_bank.bank_count);
+   
+   int startInstrumentOffset = 4 + sound_bank.bank_count * 8;
+   if((startInstrumentOffset % 0x10) != 0)
+      startInstrumentOffset += 0x10 - (startInstrumentOffset % 0x10);
+   
+   int instrumentOffset = 0;
+   
+   for (i = 0; i < sound_bank.bank_count; i++) {
+      int bankOffset = startInstrumentOffset;
+      int length = 0x20;
+      
+      //instrument info
+      write_u32_be(&sndData[bankOffset], sound_bank.banks[i].instrument_count); 
+      write_u32_be(&sndData[bankOffset+0x4], sound_bank.banks[i].percussion_count); 
+      write_u32_be(&sndData[bankOffset+0x8], sound_bank.banks[i].unknown_1); 
+      write_u32_be(&sndData[bankOffset+0xC], sound_bank.banks[i].unknown_2); 
+      
+      //only need to reference this one
+      bankOffset += 0x10;
+      
+      instrumentOffset = bankOffset + (sound_bank.banks[i].instrument_count + 1) * 4;
+      if((instrumentOffset % 0x10) != 0)
+         instrumentOffset += 0x10 - (instrumentOffset % 0x10); //THIS NEEDS TO GO ABOVE IN THE SIZE CALCULATION
+      
+      for (j = 0; j < sound_bank.banks[i].instrument_count; j++) {
+         //write inst data
+         int headInstOffset = instrumentOffset;
+         write_u32_be(&sndData[headInstOffset], sound_bank.banks[i].sounds[j].unknown);
+         write_u32_be(&sndData[headInstOffset+0xC], *((unsigned int*)&sound_bank.banks[i].sounds[j].key_base_prev)); //float to uint
+         write_u32_be(&sndData[headInstOffset+0x14], *((unsigned int*)&sound_bank.banks[i].sounds[j].key_base));
+         write_u32_be(&sndData[headInstOffset+0x1C], *((unsigned int*)&sound_bank.banks[i].sounds[j].key_base_sec));
+         
+         instrumentOffset += 0x20;
+         
+         if(sound_bank.banks[i].sounds[j].adrs != NULL) {
+            //Make this into a function please
+            write_u32_be(&sndData[headInstOffset + 0x4], instrumentOffset - bankOffset);
+            write_sound_bank_adrs(sound_bank.banks[i].sounds[j].adrs, &instrumentOffset, sndData);
+         }
+         
+         if(sound_bank.banks[i].sounds[j].wav_prev != NULL) {
+            write_u32_be(&sndData[headInstOffset + 0x8], instrumentOffset - bankOffset);
+            write_sound_bank_wav(sound_bank.banks[i].sounds[j].wav_prev, &instrumentOffset, bankOffset, sndData);
+         }
+         else {
+            write_u32_be(&sndData[headInstOffset + 0x8], 0);
+         }
+         
+         if(sound_bank.banks[i].sounds[j].wav != NULL) {
+            write_u32_be(&sndData[headInstOffset + 0x10], instrumentOffset - bankOffset);
+            write_sound_bank_wav(sound_bank.banks[i].sounds[j].wav, &instrumentOffset, bankOffset, sndData);
+         }
+         
+         if(sound_bank.banks[i].sounds[j].wav_sec != NULL) {
+            write_u32_be(&sndData[headInstOffset + 0x18], instrumentOffset - bankOffset);
+            write_sound_bank_wav(sound_bank.banks[i].sounds[j].wav_sec, &instrumentOffset, bankOffset, sndData);
+         }
+         
+         //Write the offset in the inst table
+         write_u32_be(&sndData[bankOffset + (j + 1) * 4], headInstOffset - bankOffset);
+      }
+      
+      //percussions
+      if(sound_bank.banks[i].percussion_count > 0) {
+         if((instrumentOffset % 0x10) != 0)
+            instrumentOffset += 0x10 - (instrumentOffset % 0x10); //THIS NEEDS TO GO ABOVE IN THE SIZE CALCULATION
+         
+         int percussionTableOffset = instrumentOffset;
+         
+         instrumentOffset += sound_bank.banks[i].percussion_count * 4;
+         if((instrumentOffset % 0x10) != 0)
+            instrumentOffset += 0x10 - (instrumentOffset % 0x10); //THIS NEEDS TO GO ABOVE IN THE SIZE CALCULATION
+         
+         for (j = 0; j < sound_bank.banks[i].percussion_count; j++) {
+            //table offset
+            write_u32_be(&sndData[percussionTableOffset + 4 * i], instrumentOffset - bankOffset);
+            
+            int headPercOffset = instrumentOffset;
+            sndData[headPercOffset] = sound_bank.banks[i].percussions.items[j].unknown_1;
+            sndData[headPercOffset + 1] = sound_bank.banks[i].percussions.items[j].pan;
+            write_u16_be(&sndData[headPercOffset + 0x2], sound_bank.banks[i].percussions.items[j].unknown_2);
+            write_u32_be(&sndData[headPercOffset + 0x8], *((unsigned int*)&sound_bank.banks[i].percussions.items[j].key_base));
+            
+            instrumentOffset += 0x10;
+            
+            if(sound_bank.banks[i].percussions.items[j].adrs != NULL) {
+               write_u32_be(&sndData[headPercOffset + 0xC], instrumentOffset - bankOffset);
+                write_sound_bank_adrs(sound_bank.banks[i].percussions.items[j].adrs, &instrumentOffset, sndData);
+            }
+            if(sound_bank.banks[i].percussions.items[j].wav != NULL) {
+               write_u32_be(&sndData[headPercOffset + 0x4], instrumentOffset - bankOffset);
+               write_sound_bank_wav(sound_bank.banks[i].percussions.items[j].wav, &instrumentOffset, bankOffset, sndData);
+            }
+            
+         }
+         
+         write_u32_be(&sndData[bankOffset], percussionTableOffset - bankOffset);
+      }
+            
+      if((instrumentOffset % 0x10) != 0)
+         instrumentOffset += 0x10 - (instrumentOffset % 0x10); //THIS NEEDS TO GO ABOVE IN THE SIZE CALCULATION
+      
+      write_u32_be(&sndData[4 + i * 8], startInstrumentOffset); 
+      write_u32_be(&sndData[8 + i * 8], instrumentOffset - startInstrumentOffset);
+      startInstrumentOffset = instrumentOffset;
+   }
+   
+   //STILL NEED TO WRITE THE FILE OPEN HERE!!
+   FILE *out;
+   out = fopen(bin_file, "wb");
+   if (out == NULL) {
+      return 1;
+   }
+   
+   //by this point, instrumentOffset is a true data length value for the array
+   
+   int bytes_written = fwrite(sndData, 1, instrumentOffset, out);
+   if (bytes_written != instrumentOffset) {
+      ret_val = 2;
+   }
+
+   // clean up
+   fclose(out);
+   return ret_val;
+}
+ 
 sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset) {
    
    unsigned i, j, k;

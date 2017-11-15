@@ -75,6 +75,7 @@
       unsigned unknown;
       unsigned data_count;
       unsigned char **data;
+      unsigned int *data_length;
    } sound_data_header;
 
 // function prototypes
@@ -82,11 +83,17 @@
 // initialize the key table for vadpcm decoding
 void sfx_initialize_key_table();
 
+//NEEDS COMMENTS
+int write_sound_data(sound_data_header sound_data, unsigned char *bin_file);
+
 // read the sound bank table
 // data: buffer containing sound bank data
 // data_offset: offset in data where the sound bank begins
 // returns a sound_data_header which contains info about all the sounds stored in the rom
 sound_bank_header read_sound_bank(unsigned char *data, unsigned int data_offset);
+
+//NEEDS COMMENTS
+int write_sound_bank(sound_bank_header sound_bank, unsigned char *bin_file);
 
 // read the sound data table
 // data: buffer containing sound data

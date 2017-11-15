@@ -622,6 +622,8 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
    unsigned i, j, sound_count, percussion_count;
    FILE *f_sfx_config;
 
+   char test_file[FILENAME_MAX];
+   
    sfx_initialize_key_table();
    
    sprintf(sound_dir, "%s/%s", args->output_dir, SOUNDS_SUBDIR);
@@ -632,6 +634,12 @@ static void parse_sound_banks(FILE *out, unsigned char *data, split_section *sec
    
    sound_data_header sound_data = read_sound_data(data, secTbl->start);
    sound_bank_header sound_banks = read_sound_bank(data, secCtl->start);
+   
+   sprintf(test_file, "%s/%s/data.bin", args->output_dir, SOUNDS_SUBDIR);
+   write_sound_data(sound_data, test_file);
+   
+   sprintf(test_file, "%s/%s/bank.bin", args->output_dir, SOUNDS_SUBDIR);
+   write_sound_bank(sound_banks, test_file);
    
    sound_count = 0;
    percussion_count = 0;
